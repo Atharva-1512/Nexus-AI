@@ -7,11 +7,14 @@ export interface CapitalCalculatorProps {
 }
 
 export default function CapitalCalculator({ decisionData }: CapitalCalculatorProps) {
-  // User Inputs
-  const [capital, setCapital] = useState<number>(50000);
+  // User Inputs - allow empty string for smooth typing & backspacing
+  const [capitalInput, setCapitalInput] = useState<string>('50000');
   const [useCustomLots, setUseCustomLots] = useState<boolean>(false);
-  const [customLots, setCustomLots] = useState<number>(2);
-  const [selectedStrikeMode, setSelectedStrikeMode] = useState<'AUTO' | 'ATM_ITM' | 'OTM'>('AUTO');
+  const [customLotsInput, setCustomLotsInput] = useState<string>('2');
+
+  // Parsed numerical values with fallbacks
+  const capital = Math.max(0, Number(capitalInput) || 0);
+  const customLots = Math.max(1, Number(customLotsInput) || 1);
 
   // Live market metrics
   const spot = decisionData?.spot_price || 24050;
@@ -26,13 +29,11 @@ export default function CapitalCalculator({ decisionData }: CapitalCalculatorPro
   const strike1 = isCall ? baseAtmStrike + 50 : baseAtmStrike - 100; // e.g. 23950 PE
   const strike1Premium = 210; // ~₹210 per share
   const strike1Delta = 0.48;
-  const strike1Theta = -12;
 
   // Strike 2: Far OTM (e.g., 23750 PE or 24300 CE)
   const strike2 = isCall ? baseAtmStrike + 250 : baseAtmStrike - 300; // e.g. 23750 PE
   const strike2Premium = 85; // ~₹85 per share
   const strike2Delta = 0.22;
-  const strike2Theta = -7;
 
   // Lot Calculation: Manual vs Auto Risk Sizing
   const costPerLotStrike1 = strike1Premium * lotSize; // ₹15,750
@@ -61,7 +62,7 @@ export default function CapitalCalculator({ decisionData }: CapitalCalculatorPro
 
   // AI Decision Logic: Should user buy 23950 PE or 23750 PE?
   const bestStrikeRecommendation =
-    investmentStrike1 <= capital
+    investmentStrike1 <= (capital || 1000000)
       ? {
           suggestedStrike: `NIFTY ${strike1} ${isCall ? 'CE' : 'PE'}`,
           type: 'ATM / ITM (High Delta)',
@@ -99,19 +100,19 @@ export default function CapitalCalculator({ decisionData }: CapitalCalculatorPro
             </h3>
           </div>
           <p className="text-xs text-gray-400 mt-1 font-mono">
-            Enter your capital & lot quantity to compare contracts (e.g. NIFTY {strike1} {isCall ? 'CE' : 'PE'} vs NIFTY {strike2} {isCall ? 'CE' : 'PE'}) and get exact profit projections.
+            Type any custom capital amount or custom lot count below to compare contracts and view exact profit outcomes.
           </p>
         </div>
 
         {/* Quick Capital Presets */}
         <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-400 font-mono">Capital Presets:</span>
+          <span className="text-xs text-gray-400 font-mono">Quick Presets:</span>
           {[25000, 50000, 100000, 250000].map((amt) => (
             <button
               key={amt}
-              onClick={() => setCapital(amt)}
+              onClick={() => setCapitalInput(String(amt))}
               className={`px-3 py-1 rounded-lg text-xs font-mono font-bold border transition ${
-                capital === amt
+                Number(capitalInput) === amt
                   ? 'bg-blue-600 text-white border-blue-400 shadow shadow-blue-500/40'
                   : 'bg-gray-900 text-gray-300 border-gray-800 hover:border-gray-700'
               }`}
@@ -122,33 +123,36 @@ export default function CapitalCalculator({ decisionData }: CapitalCalculatorPro
         </div>
       </div>
 
-      {/* Input Controls Row: Capital & Lot Quantity */}
+      {/* Input Controls Row: Custom Capital & Custom Lot Quantity */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-900/60 p-4 rounded-xl border border-gray-800">
-        {/* Total Capital Input */}
+        {/* Custom Capital Input Box */}
         <div className="space-y-2">
           <label className="text-xs font-bold uppercase tracking-wider text-blue-400 font-mono flex items-center justify-between">
-            <span>Enter Your Total Capital (₹)</span>
-            <span className="text-gray-400 font-normal">Trading Balance</span>
+            <span>Enter Your Custom Capital (₹)</span>
+            <span className="text-gray-400 font-normal">Type any amount</span>
           </label>
           <div className="relative">
             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-mono text-lg font-bold">₹</span>
             <input
-              type="number"
-              value={capital}
-              onChange={(e) => setCapital(Math.max(1000, Number(e.target.value)))}
-              step={5000}
-              className="w-full pl-9 pr-4 py-3 bg-gray-950 border border-blue-500/40 rounded-xl text-white font-mono text-xl font-bold focus:outline-none focus:border-blue-400 shadow-inner"
-              placeholder="e.g. 50000"
+              type="text"
+              inputMode="numeric"
+              value={capitalInput}
+              onChange={(e) => {
+                const val = e.target.value.replace(/[^0-9]/g, '');
+                setCapitalInput(val);
+              }}
+              className="w-full pl-9 pr-4 py-3 bg-gray-950 border border-blue-500/40 rounded-xl text-white font-mono text-xl font-bold focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/40 shadow-inner"
+              placeholder="Type your capital e.g. 75000"
             />
           </div>
         </div>
 
-        {/* Lot Selector Input */}
+        {/* Custom Lot Quantity Input & Preset Selectors */}
         <div className="space-y-2">
           <label className="text-xs font-bold uppercase tracking-wider text-blue-400 font-mono flex items-center justify-between">
-            <span>Number of Lots to Buy</span>
+            <span>Lots to Buy</span>
             <span className="text-emerald-400 font-bold">
-              {useCustomLots ? `${customLots} Lot(s) (${customLots * lotSize} Qty)` : 'Auto Sized by Risk'}
+              {useCustomLots ? `${activeLotsStrike1} Lot(s) (${activeLotsStrike1 * lotSize} Qty)` : 'Auto AI Sized'}
             </span>
           </label>
 
@@ -161,23 +165,44 @@ export default function CapitalCalculator({ decisionData }: CapitalCalculatorPro
                   : 'bg-gray-950 text-gray-400 border-gray-800 hover:text-white'
               }`}
             >
-              🤖 Auto AI Sizing
+              🤖 Auto AI
             </button>
 
-            {[1, 2, 3, 5, 10].map((num) => (
+            {/* Custom Lot Input Box */}
+            <div className="relative flex-1">
+              <input
+                type="text"
+                inputMode="numeric"
+                value={useCustomLots ? customLotsInput : ''}
+                onFocus={() => setUseCustomLots(true)}
+                onChange={(e) => {
+                  setUseCustomLots(true);
+                  const val = e.target.value.replace(/[^0-9]/g, '');
+                  setCustomLotsInput(val);
+                }}
+                className={`w-full px-3 py-3 rounded-xl font-mono text-xs font-bold border text-center transition ${
+                  useCustomLots
+                    ? 'bg-emerald-950/60 text-emerald-300 border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40'
+                    : 'bg-gray-950 text-gray-400 border-gray-800'
+                }`}
+                placeholder="Custom Lots..."
+              />
+            </div>
+
+            {[1, 2, 5, 10].map((num) => (
               <button
                 key={num}
                 onClick={() => {
                   setUseCustomLots(true);
-                  setCustomLots(num);
+                  setCustomLotsInput(String(num));
                 }}
-                className={`flex-1 py-3 rounded-xl font-mono text-xs font-bold border transition ${
-                  useCustomLots && customLots === num
+                className={`px-3 py-3 rounded-xl font-mono text-xs font-bold border transition ${
+                  useCustomLots && Number(customLotsInput) === num
                     ? 'bg-emerald-600 text-white border-emerald-400 shadow shadow-emerald-500/30'
                     : 'bg-gray-950 text-gray-400 border-gray-800 hover:text-white'
                 }`}
               >
-                {num} Lot{num > 1 ? 's' : ''}
+                {num}L
               </button>
             ))}
           </div>
@@ -191,7 +216,7 @@ export default function CapitalCalculator({ decisionData }: CapitalCalculatorPro
             <span className="bg-blue-500/20 text-blue-300 border border-blue-500/40 px-3 py-0.5 rounded-full text-xs font-mono font-bold uppercase">
               AI Primary Strike Suggestion
             </span>
-            <span className="text-xs text-gray-400 font-mono">Spot: ₹{spot}</span>
+            <span className="text-xs text-gray-400 font-mono">Capital: ₹{capital.toLocaleString('en-IN')}</span>
           </div>
           <h2 className="text-3xl font-black text-white font-mono flex items-center gap-3">
             <span className="text-emerald-400">{bestStrikeRecommendation.suggestedStrike}</span>
