@@ -1,0 +1,223 @@
+version: "3.9"
+
+# =============================================================
+# NEXUS AI — Docker Compose (Development)
+# Run: docker compose up -d
+# =============================================================
+
+services:
+
+  # ─────────────────────────────────────────────────────────────
+  # PostgreSQL + TimescaleDB (Time-Series OHLCV + structured data)
+  # ─────────────────────────────────────────────────────────────
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    container_name: nexus_postgres
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB:-nexus_ai}
+      POSTGRES_USER:     ${POSTGRES_USER:-nexus}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nexus_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nexus} -d ${POSTGRES_DB:-nexus_ai}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - nexus_net
+
+  # ─────────────────────────────────────────────────────────────
+  # MongoDB (News, Events, Logs — document storage)
+  # ─────────────────────────────────────────────────────────────
+  mongodb:
+    image: mongo:7.0
+    container_name: nexus_mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${POSTGRES_USER:-nexus}
+      MONGO_INITDB_ROOT_PASSWORD: ${POSTGRES_PASSWORD:-nexus_password}
+      MONGO_INITDB_DATABASE:      ${MONGO_DB:-nexus_ai}
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - nexus_net
+
+  # ─────────────────────────────────────────────────────────────
+  # Redis (Caching + Pub/Sub for real-time alerts)
+  # ─────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7.4-alpine
+    container_name: nexus_redis
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - nexus_net
+
+  # ─────────────────────────────────────────────────────────────
+  # Apache Kafka + Zookeeper (Market data streaming)
+  # ─────────────────────────────────────────────────────────────
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.7.0
+    container_name: nexus_zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME:   2000
+    ports:
+      - "2181:2181"
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_logs:/var/lib/zookeeper/log
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - nexus_net
+
+  kafka:
+    image: confluentinc/cp-kafka:7.7.0
+    container_name: nexus_kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID:                          1
+      KAFKA_ZOOKEEPER_CONNECT:                  zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS:               PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP:     PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME:         PLAINTEXT_INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR:   1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE:          "true"
+      KAFKA_LOG_RETENTION_HOURS:                168   # 7 days
+    ports:
+      - "9092:9092"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - nexus_net
+
+  # ─────────────────────────────────────────────────────────────
+  # Kafka UI (Development — view topics, messages)
+  # Access: http://localhost:8080
+  # ─────────────────────────────────────────────────────────────
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: nexus_kafka_ui
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_CLUSTERS_0_NAME:             nexus-dev
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    networks:
+      - nexus_net
+    profiles:
+      - dev-tools
+
+  # ─────────────────────────────────────────────────────────────
+  # FastAPI Backend
+  # ─────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: nexus_backend
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      MONGO_URL:     mongodb://nexus:nexus_password@mongodb:27017/nexus_ai?authSource=admin
+      REDIS_URL:     redis://redis:6379/0
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      BACKEND_RELOAD: "false"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app                    # Hot reload in development
+      - ./modules:/app/modules             # Shared modules
+      - ./data:/app/data
+      - ./ml:/app/ml
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - nexus_net
+
+  # ─────────────────────────────────────────────────────────────
+  # Next.js Frontend
+  # ─────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: nexus_frontend
+    env_file: .env
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_WS_URL:  ws://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - nexus_net
+
+# ─────────────────────────────────────────────────────────────
+# Volumes
+# ─────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+  mongo_data:
+  redis_data:
+  kafka_data:
+  zookeeper_data:
+  zookeeper_logs:
+
+# ─────────────────────────────────────────────────────────────
+# Networks
+# ─────────────────────────────────────────────────────────────
+networks:
+  nexus_net:
+    driver: bridge
