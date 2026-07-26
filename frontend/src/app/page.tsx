@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import CandlestickChart from '@/components/CandlestickChart';
 import TradingChart from '@/components/TradingChart';
+import NiftyLiveMetrics from '@/components/NiftyLiveMetrics';
+
 
 
 
@@ -181,8 +183,9 @@ export default function Home() {
             onClick={() => setActiveTab('tvchart')}
             className={`px-4 py-2 rounded-lg font-medium transition flex items-center gap-2 ${activeTab === 'tvchart' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/25' : 'text-gray-400 hover:bg-gray-800/60 hover:text-gray-200'}`}
           >
-            <span>📈 TradingView Advanced Chart</span>
+            <span>📊 Live NIFTY Metrics & Levels</span>
           </button>
+
 
           <button
             onClick={() => setActiveTab('explainability')}
@@ -228,17 +231,11 @@ export default function Home() {
       {/* Main Content Area */}
       <main className="flex-1 p-6 space-y-6 max-w-[1600px] mx-auto w-full">
 
-        {/* DEDICATED TAB: TradingView Advanced Candlestick Chart */}
+        {/* DEDICATED TAB: Live NIFTY 50 Metrics, Targets & S/R Levels */}
         {activeTab === 'tvchart' && (
-          <div className="w-full space-y-6">
-            <TradingChart
-              symbol="NSE:NIFTY"
-              interval="5m"
-              theme="dark"
-              timezone="Asia/Kolkata"
-            />
-          </div>
+          <NiftyLiveMetrics decisionData={decisionData} />
         )}
+
 
 
         {/* TAB 1: COMMAND CENTER / DECISION ENGINE */}
