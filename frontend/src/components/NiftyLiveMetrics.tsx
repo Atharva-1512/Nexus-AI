@@ -1,6 +1,8 @@
 'use client';
 
 import React from 'react';
+import CapitalCalculator from './CapitalCalculator';
+
 
 export interface NiftyLiveMetricsProps {
   decisionData?: any;
@@ -156,6 +158,10 @@ export default function NiftyLiveMetrics({ decisionData }: NiftyLiveMetricsProps
           </div>
         </div>
       </div>
+
+      {/* Interactive AI Capital Allocation & Profit Calculator */}
+      <CapitalCalculator decisionData={decisionData} />
     </div>
   );
 }
+
