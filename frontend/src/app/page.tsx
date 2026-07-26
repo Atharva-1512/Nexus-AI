@@ -389,7 +389,7 @@ export default function Home() {
                   </div>
                   <div className="flex justify-between py-1.5 border-b border-gray-800">
                     <span className="text-gray-400">NIFTY Lot Size:</span>
-                    <span className="font-mono text-white font-bold">75 Qty</span>
+                    <span className="font-mono text-white font-bold">65 Qty</span>
                   </div>
                   <div className="flex justify-between py-1.5 border-b border-gray-800">
                     <span className="text-gray-400">Macro Regime Multiplier:</span>
@@ -397,8 +397,9 @@ export default function Home() {
                   </div>
                   <div className="flex justify-between py-1.5 text-sm pt-2">
                     <span className="text-gray-200 font-semibold">Recommended Quantity:</span>
-                    <span className="font-mono text-blue-400 font-black text-base">1 Lot (75 Qty)</span>
+                    <span className="font-mono text-blue-400 font-black text-base">1 Lot (65 Qty)</span>
                   </div>
+
                 </div>
               </div>
 

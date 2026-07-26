@@ -20,7 +20,8 @@ export default function CapitalCalculator({ decisionData }: CapitalCalculatorPro
   const spot = decisionData?.spot_price || 24050;
   const recommendation = decisionData?.recommendation || 'BUY PUT'; // e.g. BUY PUT or BUY CALL
   const isCall = recommendation.includes('CALL');
-  const lotSize = 75; // NIFTY 1 Lot = 75 Qty
+  const lotSize = 65; // NIFTY Lot Size (65 Qty)
+
 
   // Dynamic strike calculation for PE scenarios (e.g., 23950 PE vs 23750 PE)
   const baseAtmStrike = isCall ? Math.floor(spot / 50) * 50 : Math.ceil(spot / 50) * 50; // 24050 / 24000

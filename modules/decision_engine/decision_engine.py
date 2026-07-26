@@ -133,7 +133,8 @@ SIGNAL_WEIGHTS = {
 
 # ─── Option Helpers ────────────────────────────────────────────────────────────
 
-NIFTY_LOT_SIZE = 75
+NIFTY_LOT_SIZE = 65
+
 
 
 def next_tuesday(from_dt: Optional[datetime] = None) -> str:
